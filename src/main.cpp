@@ -1,3 +1,4 @@
+#include <chrono>
 #include <ctime>
 #include <iostream>
 #include <math.h>
@@ -23,20 +24,24 @@ void framebuffer_size_callback(
 	glViewport(0, 0, width, height);
 }
 
-void processInput(GLFWwindow *window) {
+void processInput(GLFWwindow *window, Board* board) {
 	if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
 		glfwSetWindowShouldClose(window, true);
 
-	if(glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
-		if (mixValue < 0.999) {
-			mixValue += 1E-2;
-		}
+	if(glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+		board -> change_snake_direction(3);
 	}
 	
-	if(glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
-		if (mixValue > 0.001) {
-			mixValue -= 1E-2;
-		}
+	if(glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+		board -> change_snake_direction(1);
+	}
+
+	if(glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+		board -> change_snake_direction(0);
+	}
+	
+	if(glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+		board -> change_snake_direction(2);
 	}
 }
 
@@ -46,6 +51,10 @@ int main() {
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 
+	// ===================================================================
+	// Set up window
+	// ===================================================================
+	
 	GLFWwindow* window = glfwCreateWindow(
 		800, 600, "LearnOpenGL", NULL, NULL
 	);
@@ -66,7 +75,7 @@ int main() {
 
 	Shader myShader = Shader("shader.vs", "shader.fs");
 
-	glViewport(0, 0, 800, 600);
+	glViewport(0, 0, 800, 800);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
 	// ===================================================================
@@ -75,9 +84,9 @@ int main() {
 
 	float vertices[] = {
 		// positions		// colors		// texture coords
-		 0.5f, -0.5f, 0.0f,	1.0f, 0.0f, 0.0f,	2.0f, 2.0f,
-		-0.5f, -0.5f, 0.0f,	0.0f, 1.0f, 0.0f,	2.0f, 0.0f,
-		 0.0f,  0.5f, 0.0f,	0.0f, 0.0f, 1.0f,	0.0f, 0.0f
+		 1.0f,  1.0f, 0.0f,	1.0f, 0.0f, 0.0f,	2.0f, 2.0f,
+		-1.0f,  1.0f, 0.0f,	0.0f, 1.0f, 0.0f,	2.0f, 0.0f,
+		-1.0f, -1.0f, 0.0f,	0.0f, 0.0f, 1.0f,	0.0f, 0.0f
 	};
 
 	unsigned int firstIndices[] = {
@@ -104,36 +113,68 @@ int main() {
 
 	myShader.use();
 
+	// ===================================================================
+	// Set up game
+	// ===================================================================
+
+	Board my_board = Board(120, 120);	
+	bool allow_animation = true;
+	int period = 10;
+	float period_factor = 100;
+
 	while(!glfwWindowShouldClose(window)) {
-		time_t now = time(0);
+		const auto p1 = std::chrono::system_clock::now();
+		int my_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                   p1.time_since_epoch()).count();
+		bool animation_time = int(my_time / period_factor) % period == 0;
 
-		processInput(window);
-
-		glClearColor(0.1 * (now % 10), 0.3f, 0.3f, 1.0f);
+		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		glm::mat4 trans = glm::mat4(1.0f);
-		trans = glm::translate(trans, glm::vec3(0.5f, -0.5f, 0.0f));
-		trans = glm::rotate(
-			trans, (float)glfwGetTime(), 
-			glm::vec3(0.0f, 0.0f, 1.0f));
-
-		myShader.setFloat("mixValue", mixValue);
-		myShader.setFloat("horizontal_offset", -0.0);		
-		myShader.setMat4("transform", trans);
 		myShader.use();
 
 		glBindVertexArray(VAO);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-		glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
 
-		glm::mat4 trans_2 = glm::mat4(1.0f);
-		float scaling_factor = sin((float)glfwGetTime());
-		trans_2 = glm::translate(trans_2, glm::vec3(-0.5f, 0.5f, 0.0f));
-		trans_2 = glm::scale(
-			trans_2, scaling_factor * glm::vec3(1.0f));
-		myShader.setMat4("transform", trans_2);
-		glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
+		processInput(window, &my_board);
+
+		if (animation_time and allow_animation) {
+			my_board.move_snake();
+			allow_animation = false;
+		}
+
+		if (!animation_time) {
+			allow_animation = true;
+		}
+
+		for (int i = 0; i < my_board.snake.x.size(); i++) {
+			glm::mat4 trans = glm::mat4(1.0f);
+			float scaling_factor = float(1.0 / my_board.x_size);
+			float x = float(my_board.snake.x[i]) + .5;
+			float y = float(my_board.snake.y[i]) + .5;
+			float x_centre = my_board.x_size / 2;
+			float y_centre = my_board.y_size / 2;
+			glm::vec3 trans_vector = glm::vec3(
+				(x - x_centre) * 2 * scaling_factor,
+				(y - y_centre) * 2 * scaling_factor,
+				0.0f
+			);
+			trans = glm::translate(trans, trans_vector);
+			trans = glm::scale(
+				trans,
+				scaling_factor * glm::vec3(1.0f)
+			);
+			myShader.setMat4("transform", trans);	
+			glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
+
+			trans = glm::rotate(
+				trans, float(M_PI), 
+				glm::vec3(0.0f, 0.0f, 1.0f));
+			myShader.setMat4("transform", trans);
+			glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
+
+			//std::cout << x << ", " << y << "; " << x_centre << ", " << y_centre << "\n";
+		}
 
 		glfwSwapBuffers(window);
 		glfwPollEvents();
