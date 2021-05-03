@@ -25,8 +25,10 @@ void framebuffer_size_callback(
 }
 
 void processInput(GLFWwindow *window, Board* board) {
-	if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+	if(glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+		printf("Final score: %u\n", board -> score);
 		glfwSetWindowShouldClose(window, true);
+	}
 
 	if(glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
 		board -> change_snake_direction(3);
@@ -56,7 +58,7 @@ int main() {
 	// ===================================================================
 	
 	GLFWwindow* window = glfwCreateWindow(
-		800, 600, "LearnOpenGL", NULL, NULL
+		800, 800, "LearnOpenGL", NULL, NULL
 	);
 
 	if (window == NULL) {
@@ -77,6 +79,37 @@ int main() {
 
 	glViewport(0, 0, 800, 800);
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+        // ===================================================================
+	// Load texture 1
+	// ===================================================================
+	unsigned int texture_wall;
+	glGenTextures(1, &texture_wall);
+	glBindTexture(GL_TEXTURE_2D, texture_wall);
+
+	// Set the texture wrapping / filtering options (on currently bound texture)
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+	// Load and generate the texture
+	int width, height, nrChannels;
+	unsigned char *data = stbi_load(
+		"../resources/container.jpg", 
+		&width, &height, &nrChannels, 0);
+
+	if (data) {
+		glTexImage2D(
+			GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB,
+			GL_UNSIGNED_BYTE, data
+		);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	} else {
+		std::cout << "Failed to load texture" << std::endl;
+	}
+
+	stbi_image_free(data);
 
 	// ===================================================================
 	// Set up vertex data
@@ -112,21 +145,26 @@ int main() {
 	glEnableVertexAttribArray(2);
 
 	myShader.use();
+	myShader.setInt("texture_wall", 0);
 
 	// ===================================================================
 	// Set up game
 	// ===================================================================
 
-	Board my_board = Board(120, 120);	
+	Board my_board = Board(25, 25);	
 	bool allow_animation = true;
-	int period = 10;
-	float period_factor = 100;
+
+	int anim_period = 200;
+
+	const auto p0 = std::chrono::system_clock::now();
+	int central_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+        	p0.time_since_epoch()).count();
 
 	while(!glfwWindowShouldClose(window)) {
 		const auto p1 = std::chrono::system_clock::now();
 		int my_time = std::chrono::duration_cast<std::chrono::milliseconds>(
                    p1.time_since_epoch()).count();
-		bool animation_time = int(my_time / period_factor) % period == 0;
+		bool animation_time = my_time - central_time > anim_period;
 
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
@@ -136,24 +174,40 @@ int main() {
 		glBindVertexArray(VAO);
 		glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
 
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, texture_wall);
+
 		processInput(window, &my_board);
 
 		if (animation_time and allow_animation) {
 			my_board.move_snake();
+
+			if (!my_board.alive) {
+				printf("Final score: %u\n", my_board.score);
+			}
+
+			central_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+        			p1.time_since_epoch()).count();
 			allow_animation = false;
 		}
 
+		animation_time = my_time - central_time > anim_period;
 		if (!animation_time) {
 			allow_animation = true;
 		}
 
-		for (int i = 0; i < my_board.snake.x.size(); i++) {
+		for (int i = 0; i < my_board.x_wall.size(); i++) {
 			glm::mat4 trans = glm::mat4(1.0f);
 			float scaling_factor = float(1.0 / my_board.x_size);
-			float x = float(my_board.snake.x[i]) + .5;
-			float y = float(my_board.snake.y[i]) + .5;
+			float x = float(my_board.x_wall[i]) + .5;
+			float y = float(my_board.y_wall[i]) + .5;
 			float x_centre = my_board.x_size / 2;
 			float y_centre = my_board.y_size / 2;
+			int color_mode = my_board.pixel[my_board.x_wall[i]][
+				my_board.y_wall[i]];
+
+			myShader.setInt("colorMode", color_mode);
+
 			glm::vec3 trans_vector = glm::vec3(
 				(x - x_centre) * 2 * scaling_factor,
 				(y - y_centre) * 2 * scaling_factor,
@@ -164,6 +218,13 @@ int main() {
 				trans,
 				scaling_factor * glm::vec3(1.0f)
 			);
+
+			if (color_mode == 3) {
+				trans = glm::rotate(
+					trans, (float)glfwGetTime(), 
+					glm::vec3(0.0f, 0.0f, 1.0f));
+			}
+
 			myShader.setMat4("transform", trans);	
 			glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
 
@@ -173,7 +234,6 @@ int main() {
 			myShader.setMat4("transform", trans);
 			glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
 
-			//std::cout << x << ", " << y << "; " << x_centre << ", " << y_centre << "\n";
 		}
 
 		glfwSwapBuffers(window);
