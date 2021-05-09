@@ -16,8 +16,6 @@
 
 #include "board.h"
 
-float mixValue = 0.2;
-
 void framebuffer_size_callback(
 	GLFWwindow* window, int width, int height
 ) {
@@ -119,11 +117,13 @@ int main() {
 		// positions		// colors		// texture coords
 		 1.0f,  1.0f, 0.0f,	1.0f, 0.0f, 0.0f,	2.0f, 2.0f,
 		-1.0f,  1.0f, 0.0f,	0.0f, 1.0f, 0.0f,	2.0f, 0.0f,
-		-1.0f, -1.0f, 0.0f,	0.0f, 0.0f, 1.0f,	0.0f, 0.0f
+		-1.0f, -1.0f, 0.0f,	0.0f, 0.0f, 1.0f,	0.0f, 0.0f,
+		 1.0f, -1.0f, 0.0f,	1.0f, 0.0f, 0.0f,	0.0f, 2.0f
 	};
 
 	unsigned int firstIndices[] = {
-		0, 1, 2
+		0, 1, 2,
+		0, 2, 3
 	};
 
 	unsigned int VBO, VAO, EBO;
@@ -141,7 +141,7 @@ int main() {
 	glEnableVertexAttribArray(0);
 	glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*) (3 * sizeof(float)));
 	glEnableVertexAttribArray(1);
-	glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*) (6 * sizeof(float)));
+	glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*) (6 * sizeof(float)));
 	glEnableVertexAttribArray(2);
 
 	myShader.use();
@@ -201,8 +201,8 @@ int main() {
 			float scaling_factor = float(1.0 / my_board.x_size);
 			float x = float(my_board.x_wall[i]) + .5;
 			float y = float(my_board.y_wall[i]) + .5;
-			float x_centre = my_board.x_size / 2;
-			float y_centre = my_board.y_size / 2;
+			float x_centre = (float)my_board.x_size / 2;
+			float y_centre = (float)my_board.y_size / 2;
 			int color_mode = my_board.pixel[my_board.x_wall[i]][
 				my_board.y_wall[i]];
 
@@ -226,13 +226,7 @@ int main() {
 			}
 
 			myShader.setMat4("transform", trans);	
-			glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
-
-			trans = glm::rotate(
-				trans, float(M_PI), 
-				glm::vec3(0.0f, 0.0f, 1.0f));
-			myShader.setMat4("transform", trans);
-			glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, 0);
+			glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
 		}
 
